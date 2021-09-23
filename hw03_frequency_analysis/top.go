@@ -2,62 +2,31 @@ package hw03frequencyanalysis
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 )
 
-type TopWord struct {
-	count int
-	word  string
-}
-
-func (c *TopWord) Initialize() {
-	c.count = 0
-	c.word = ""
-}
-
-func (c *TopWord) Check(word string, count int) {
-	if count > c.count {
-		c.count = count
-		c.word = word
-	}
-
-	if count == c.count && strings.Compare(c.word, word) == 1 {
-		c.word = word
-	}
-}
-
-func (c *TopWord) String() string {
-	return c.word
-}
-
 func Top10(s string) []string {
-	var result []string
-
 	words := getWordsWithCount(s)
 	if len(words) == 0 {
-		return result
+		return []string{}
 	}
 
-	var curr TopWord
+	sorted := getSorted(words)
 
-	for len(result) < 10 && len(words) > 0 {
-		curr.Initialize()
-
-		for word, count := range words {
-			curr.Check(word, count)
-		}
-
-		result = append(result, curr.String())
-		delete(words, curr.String())
+	if len(sorted) > 10 {
+		return sorted[:10]
 	}
 
-	return result
+	return sorted
 }
+
+const pattern = `[^A-zА-яеЁ]*([A-zА-я]+[A-zА-я-]*)[^A-zА-яеЁ]*`
 
 func getWordsWithCount(s string) map[string]int {
 	result := make(map[string]int)
 
-	r := regexp.MustCompile(`[^A-zА-яеЁ]*([A-zА-я]+[A-zА-я-]*)[^A-zА-яеЁ]*`)
+	r := regexp.MustCompile(pattern)
 
 	for _, w := range strings.Fields(s) {
 		if !r.MatchString(w) {
@@ -70,4 +39,24 @@ func getWordsWithCount(s string) map[string]int {
 	}
 
 	return result
+}
+
+func getSorted(words map[string]int) []string {
+	uniq := make([]string, len(words))
+	i := 0
+
+	for w := range words {
+		uniq[i] = w
+		i++
+	}
+
+	sort.Slice(uniq, func(i, j int) bool {
+		if words[uniq[i]] == words[uniq[j]] {
+			return uniq[i] < uniq[j]
+		}
+
+		return words[uniq[i]] > words[uniq[j]]
+	})
+
+	return uniq
 }
