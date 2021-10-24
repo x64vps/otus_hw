@@ -11,13 +11,13 @@ var ErrErrorsLimitExceeded = errors.New("errors limit exceeded")
 type Task func() error
 
 type Supervisor struct {
-	m int32
+	m       int32
 	counter int32
-	done chan struct{}
-	err chan struct{}
+	done    chan struct{}
+	err     chan struct{}
 }
 
-func NewSupervisor(n, m int) *Supervisor  {
+func NewSupervisor(n, m int) *Supervisor {
 	s := Supervisor{m: int32(m)}
 
 	s.done = make(chan struct{})
@@ -32,7 +32,7 @@ func (s *Supervisor) Close() {
 	close(s.err)
 }
 
-func (s *Supervisor) Generator(tasks []Task) <-chan Task{
+func (s *Supervisor) Generator(tasks []Task) <-chan Task {
 	ch := make(chan Task)
 
 	go func() {
@@ -68,7 +68,7 @@ func (s *Supervisor) Worker(tasks <-chan Task) {
 }
 
 func (s *Supervisor) ErrorsHandler() {
-	for  {
+	for {
 		select {
 		case <-s.err:
 			atomic.AddInt32(&s.counter, 1)
@@ -86,7 +86,6 @@ func (s *Supervisor) ErrorsHandler() {
 func (s *Supervisor) IsErrorsLimitExceeded() bool {
 	return atomic.LoadInt32(&s.counter) >= s.m
 }
-
 
 // Run starts tasks in n goroutines and stops its work when receiving m errors from tasks.
 func Run(tasks []Task, n, m int) error {
@@ -108,7 +107,7 @@ func Run(tasks []Task, n, m int) error {
 	wg.Wait()
 
 	if s.IsErrorsLimitExceeded() {
-		return ErrErrorsLimitExceeded;
+		return ErrErrorsLimitExceeded
 	}
 
 	return nil
