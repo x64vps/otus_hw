@@ -50,13 +50,53 @@ func TestCache(t *testing.T) {
 	})
 
 	t.Run("purge logic", func(t *testing.T) {
-		// Write me
+		c := NewCache(1)
+
+		wasInCache := c.Set("aaa", 100)
+		require.False(t, wasInCache)
+
+		c.Clear()
+
+		_, wasInCache = c.Get("aaa")
+		require.False(t, wasInCache)
+	})
+
+	t.Run("push by capacity", func(t *testing.T) {
+		c := NewCache(2)
+
+		c.Set("aaa", 100)
+		c.Set("bbb", 100)
+		c.Set("ccc", 100)
+
+		_, wasInCache := c.Get("aaa")
+		require.False(t, wasInCache)
+	})
+
+	t.Run("push by old value", func(t *testing.T) {
+		c := NewCache(3)
+
+		c.Set("aaa", 100)
+		c.Set("bbb", 100)
+		c.Set("ccc", 100)
+
+		c.Set("aaa", 200)
+
+		val, wasInCache := c.Get("aaa")
+		require.True(t, wasInCache)
+		require.Equal(t, 200, val)
+
+		val, wasInCache = c.Get("bbb")
+		require.True(t, wasInCache)
+		require.Equal(t, 100, val)
+
+		c.Set("ddd", 100)
+
+		_, wasInCache = c.Get("ccc")
+		require.False(t, wasInCache)
 	})
 }
 
 func TestCacheMultithreading(t *testing.T) {
-	t.Skip() // Remove me if task with asterisk completed.
-
 	c := NewCache(10)
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
