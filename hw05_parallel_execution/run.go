@@ -41,13 +41,13 @@ func (s *Supervisor) IsErrorsLimitExceeded() bool {
 	return atomic.LoadInt32(&s.errCnt) >= s.m
 }
 
-func (s *Supervisor) IncrementErrorsCounter()  {
+func (s *Supervisor) IncrementErrorsCounter() {
 	atomic.AddInt32(&s.errCnt, 1)
 }
 
 // Run starts tasks in n goroutines and stops its work when receiving m errors from tasks.
 func Run(tasks []Task, n, m int) error {
-	if n < 1 || m < 1 || len(tasks) == 0{
+	if n < 1 || m < 1 || len(tasks) == 0 {
 		return nil
 	}
 
