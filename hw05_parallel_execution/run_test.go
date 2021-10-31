@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 )
@@ -73,53 +72,52 @@ func TestRun(t *testing.T) {
 		tasksCount := 50
 		tasks := make([]Task, 0, tasksCount)
 
-		var runTasksCount int32
-		var sumTime time.Duration
-
 		for i := 0; i < tasksCount; i++ {
 			taskSleep := time.Millisecond * time.Duration(rand.Intn(100))
-			sumTime += taskSleep
-
 			tasks = append(tasks, func() error {
 				time.Sleep(taskSleep)
-				atomic.AddInt32(&runTasksCount, 1)
 				return nil
 			})
 		}
 
-		workersCount := 5
-		maxErrorsCount := 0
-
-		err := Run(tasks, workersCount, maxErrorsCount)
-
-		require.Truef(t, errors.Is(err, ErrErrorsLimitExceeded), "actual err - %v", err)
-		require.Equal(t, runTasksCount, int32(tasksCount), "not all tasks were completed")
+		require.NoError(t, Run(tasks, 5, 0))
 	})
 
 	t.Run("concurrency without time.Sleep", func(t *testing.T) {
-		tasksCount := 50
-		tasks := make([]Task, 0, tasksCount)
+		const workerCount = 5
+		tasks := make([]Task, workerCount)
 
-		var sumTime time.Duration
-
-		for i := 0; i < tasksCount; i++ {
-			taskSleep := time.Millisecond * time.Duration(rand.Intn(100))
-			sumTime += taskSleep
-
-			tasks = append(tasks, func() error {
-				time.Sleep(taskSleep)
+		waitCh := make(chan struct{})
+		var runTaskCounter int32
+		for i := 0; i < len(tasks); i++ {
+			tasks[i] = func() error {
+				atomic.AddInt32(&runTaskCounter, 1)
+				<-waitCh
 				return nil
-			})
+			}
 		}
 
-		workersCount := 5
-		maxErrorsCount := 1
+		runErrCh := make(chan error, 1)
+		go func() {
+			runErrCh <- Run(tasks, workerCount, workerCount)
+		}()
 
-		f := func() bool {
-			_ = Run(tasks, workersCount, maxErrorsCount)
-			return true
-		}
+		require.Eventually(t, func() bool {
+			return atomic.LoadInt32(&runTaskCounter) == workerCount
+		}, time.Second, time.Millisecond)
 
-		assert.Eventually(t, f, sumTime/2, 10*time.Millisecond)
+		close(waitCh)
+
+		var runErr error
+		require.Eventually(t, func() bool {
+			select {
+			case <-runErrCh:
+				return true
+			default:
+				return false
+			}
+		}, time.Second, time.Millisecond)
+
+		require.NoError(t, runErr)
 	})
 }

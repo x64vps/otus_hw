@@ -11,25 +11,12 @@ var ErrErrorsLimitExceeded = errors.New("errors limit exceeded")
 type Task func() error
 
 type Supervisor struct {
-	m       int32
-	counter int32
-	done    chan struct{}
-	err     chan struct{}
+	m      int32
+	errCnt int32
 }
 
-func NewSupervisor(n, m int) *Supervisor {
-	s := Supervisor{m: int32(m)}
-
-	s.done = make(chan struct{})
-	s.err = make(chan struct{}, n)
-
-	go s.ErrorsHandler()
-
-	return &s
-}
-
-func (s *Supervisor) Close() {
-	close(s.err)
+func NewSupervisor(m int) *Supervisor {
+	return &Supervisor{m: int32(m)}
 }
 
 func (s *Supervisor) Generator(tasks []Task) <-chan Task {
@@ -39,58 +26,32 @@ func (s *Supervisor) Generator(tasks []Task) <-chan Task {
 		defer close(ch)
 
 		for _, task := range tasks {
-			select {
-			case ch <- task:
-			case <-s.done:
+			if s.IsErrorsLimitExceeded() {
 				return
 			}
+
+			ch <- task
 		}
 	}()
 
 	return ch
 }
 
-func (s *Supervisor) Worker(tasks <-chan Task) {
-	for {
-		select {
-		case task, ok := <-tasks:
-			if !ok {
-				return
-			}
-
-			if err := task(); err != nil {
-				s.err <- struct{}{}
-			}
-		case <-s.done:
-			return
-		}
-	}
-}
-
-func (s *Supervisor) ErrorsHandler() {
-	for {
-		select {
-		case <-s.err:
-			atomic.AddInt32(&s.counter, 1)
-
-			if s.IsErrorsLimitExceeded() {
-				close(s.done)
-				return
-			}
-		case <-s.done:
-			return
-		}
-	}
-}
-
 func (s *Supervisor) IsErrorsLimitExceeded() bool {
-	return atomic.LoadInt32(&s.counter) >= s.m
+	return atomic.LoadInt32(&s.errCnt) >= s.m
+}
+
+func (s *Supervisor) IncrementErrorsCounter()  {
+	atomic.AddInt32(&s.errCnt, 1)
 }
 
 // Run starts tasks in n goroutines and stops its work when receiving m errors from tasks.
 func Run(tasks []Task, n, m int) error {
-	s := NewSupervisor(n, m)
-	defer s.Close()
+	if n < 1 || m < 1 || len(tasks) == 0{
+		return nil
+	}
+
+	s := NewSupervisor(m)
 
 	generator := s.Generator(tasks)
 
@@ -100,7 +61,12 @@ func Run(tasks []Task, n, m int) error {
 	for i := 0; i < n; i++ {
 		go func() {
 			defer wg.Done()
-			s.Worker(generator)
+
+			for task := range generator {
+				if err := task(); err != nil {
+					s.IncrementErrorsCounter()
+				}
+			}
 		}()
 	}
 
